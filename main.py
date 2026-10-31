@@ -554,6 +554,60 @@ app.add_middleware(
 )
 
 
+# --- Model metrics middleware (MCIT-371) ---
+# Records model-labelled request/latency/error metrics for the proxy routes.
+# Reads the model from the parsed JSON body once; never blocks the request if
+# anything goes wrong. Generic per-route metrics come from the instrumentator.
+import time as _time
+import json as _json
+from starlette.middleware.base import BaseHTTPMiddleware
+from kiro.metrics import MODEL_REQUESTS, MODEL_LATENCY, UPSTREAM_ERRORS, status_class
+
+_METRIC_ROUTES = {
+    "/v1/chat/completions": "chat_completions",
+    "/v1/messages": "messages",
+}
+
+
+class ModelMetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        route = _METRIC_ROUTES.get(request.url.path)
+        if route is None:
+            return await call_next(request)
+
+        model = "unknown"
+        try:
+            body = await request.body()
+            if body:
+                model = (_json.loads(body) or {}).get("model") or "unknown"
+            # re-stash the body so downstream handlers can still read it
+            async def _receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+            request._receive = _receive
+        except Exception:
+            pass
+
+        start = _time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            elapsed = _time.perf_counter() - start
+            outcome = "success" if status < 400 else "error"
+            try:
+                MODEL_REQUESTS.labels(model=model, route=route, outcome=outcome).inc()
+                MODEL_LATENCY.labels(model=model, route=route).observe(elapsed)
+                if status >= 400:
+                    UPSTREAM_ERRORS.labels(model=model, status_class=status_class(status)).inc()
+            except Exception:
+                pass
+
+
+app.add_middleware(ModelMetricsMiddleware)
+
+
 # --- Debug Logger Middleware ---
 # Initializes debug logging BEFORE Pydantic validation
 # This allows capturing validation errors (422) in debug logs
@@ -570,6 +624,24 @@ app.include_router(openai_router)
 
 # Anthropic-compatible API: /v1/messages
 app.include_router(anthropic_router)
+
+
+# --- Prometheus metrics (MCIT-371) ---
+# Generic HTTP metrics (request count, latency histogram, in-flight) across all
+# routes, plus a /metrics endpoint. Model/token-labelled counters live in
+# kiro/metrics.py and are incremented inside the routes. /metrics is NOT
+# behind the API key so Prometheus/otel-collector can scrape it in-cluster.
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        excluded_handlers=["/metrics", "/health"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+    logger.info("Prometheus metrics enabled at /metrics")
+except Exception as e:  # never let metrics wiring break the gateway
+    logger.warning(f"Prometheus metrics not enabled: {e}")
 
 
 # --- Uvicorn log config ---

@@ -5,6 +5,8 @@ httpx
 loguru
 python-dotenv
 tiktoken
+prometheus-client
+prometheus-fastapi-instrumentator
 
 # Testing dependencies
 pytest

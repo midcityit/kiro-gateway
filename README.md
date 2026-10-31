@@ -869,3 +869,24 @@ This project is not affiliated with, endorsed by, or sponsored by Amazon Web Ser
 **[⬆ Back to Top](#-kiro-gateway)**
 
 </div>
+
+---
+
+## MidCityIT fork notes (MCIT-371)
+
+This is a fork of [jwadow/kiro-gateway](https://github.com/jwadow/kiro-gateway)
+maintained by MidCityIT for the `openclaw-container` image (openclaw-apollo on
+mcit-k8s). `upstream` remote tracks jwadow for rebasing fixes.
+
+Additions over upstream:
+- **Prometheus `/metrics`** (prometheus-fastapi-instrumentator): generic HTTP
+  request/latency/in-flight metrics for all routes, plus model-labelled
+  counters (`kiro_gateway_model_requests_total`,
+  `kiro_gateway_model_request_duration_seconds`,
+  `kiro_gateway_upstream_errors_total`, `kiro_gateway_tokens_total`) via a
+  lightweight middleware (`kiro/metrics.py` + `ModelMetricsMiddleware`).
+  `/metrics` is unauthenticated for in-cluster scraping; emits no secrets.
+
+Model registry (`FALLBACK_MODELS` in `kiro/config.py`) is inherited from
+upstream and kept current there; the gateway is a pass-through ("not a
+gatekeeper") so entitlement is decided by the Kiro API.

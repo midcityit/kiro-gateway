@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
+from kiro.metrics import record_request
 from kiro.config import PROXY_API_KEY, PROFILE_ARN
 from kiro.models_anthropic import (
     AnthropicMessagesRequest,
@@ -146,6 +147,7 @@ async def messages(
         HTTPException: On validation or API errors
     """
     logger.info(f"Request to /v1/messages (model={request_data.model}, stream={request_data.stream})")
+    record_request(request_data.model, "messages")
     
     if anthropic_version:
         logger.debug(f"Anthropic-Version header: {anthropic_version}")

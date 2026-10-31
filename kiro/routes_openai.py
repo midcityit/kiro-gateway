@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
+from kiro.metrics import record_request
 from kiro.config import (
     PROXY_API_KEY,
     APP_VERSION,
@@ -177,6 +178,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         HTTPException: On validation or API errors
     """
     logger.info(f"Request to /v1/chat/completions (model={request_data.model}, stream={request_data.stream})")
+    record_request(request_data.model, "chat_completions")
     
     # Note: prepare_new_request() and log_request_body() are now called by DebugLoggerMiddleware
     # This ensures debug logging works even for requests that fail Pydantic validation (422 errors)

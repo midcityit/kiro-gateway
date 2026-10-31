@@ -50,3 +50,12 @@ def status_class(code: int) -> str:
         return f"{int(code) // 100}xx"
     except (TypeError, ValueError):
         return "other"
+
+
+def record_request(model: str | None, route: str) -> None:
+    """Record a handled request by model + route. Called at handler entry so it
+    never interferes with the (streaming) response path. Safe no-op on error."""
+    try:
+        MODEL_REQUESTS.labels(model=model or "unknown", route=route, outcome="received").inc()
+    except Exception:
+        pass

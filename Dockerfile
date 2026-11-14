@@ -1,7 +1,7 @@
 # Kiro Gateway - Docker Image
 # Optimized single-stage build
 
-FROM python:3.10-slim
+FROM python:3.10-slim@sha256:6ff506466f8b1e981719b468cc0023b8ef000b983cdec0eafe119d01f379e31d
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
